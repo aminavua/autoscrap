@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# hosting-scraper outputs and local config (may contain proxy credentials)
+runs/
+config.yml
+*.sqlite3
