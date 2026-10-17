@@ -1,0 +1,173 @@
+# hosting-scraper configuration
+# Copy to config.yml and edit. Paths are resolved relative to this file.
+# Every key shown here matches the validated schema; unknown keys are rejected.
+
+app:
+  name: hosting-scraper
+  user_agent: "hosting-scraper/1.0 (+contact: you@example.com)"
+  timezone: "UTC"
+
+providers_source:
+  # Certbot's community-maintained registry. "certbot_github" understands both
+  # github.com/.../blob/... and raw.githubusercontent.com URLs and tries the
+  # GitHub API first. "url" is a plain JSON fetch; "file" reads a local file.
+  type: certbot_github
+  url: "https://raw.githubusercontent.com/certbot/website/master/_data/hosting_providers.json"
+  cache:
+    enabled: true
+    path: ".cache/hosting_providers.json"
+    ttl_hours: 24
+  urls:
+    # By default only each provider's homepage ("link") is crawled. Set
+    # include_extra_urls: true to also seed plan/announcement URLs from the
+    # registry (useful when "link" is empty or pricing lives on its own page).
+    include_extra_urls: false
+    extra_url_fields: ["announcement", "plan"]
+    same_site_only: true
+    base_url_from: ["link", "plan", "announcement", "tutorial"]
+  # Some registry entries have no usable URL and are skipped. Override by
+  # provider name or domain; base_url is then used as the seed.
+  # overrides:
+  #   "Cloudways":
+  #     base_url: "https://www.cloudways.com/"
+  #     include: true
+  #     extra_url_fields: ["plan"]     # registry fields to add as seeds
+  #     extra_urls: ["https://www.cloudways.com/en/pricing.php"]
+  # exclude: ["godaddy.com"]
+
+crawl:
+  max_sites: 0                 # 0 = no limit
+  concurrency: 8               # provider sites crawled in parallel
+  per_domain_concurrency: 2    # simultaneous requests to one domain
+  delay_seconds: 0.5
+  timeout_seconds: 30
+  retries: 2
+  retry_backoff_seconds: 1.0
+  respect_robots_txt: false    # set true for strict compliance
+  headers:
+    Accept-Language: "en-US,en;q=0.9"
+  include_domains: []          # e.g. ["hostinger.com"]
+  exclude_domains: []          # e.g. ["godaddy.com"]
+  prefer_https: true
+  max_redirects: 8
+
+discovery:
+  max_candidate_pages_per_site: 8
+  max_links_to_scan: 80
+  common_paths:
+    - "/pricing"
+    - "/plans"
+    - "/plan"
+    - "/web-hosting"
+    - "/hosting"
+    - "/vps"
+    - "/wordpress-hosting"
+    - "/cloud-hosting"
+    - "/dedicated"
+    - "/shared-hosting"
+    - "/reseller-hosting"
+  keywords:
+    url: ["pricing", "plans", "hosting", "vps", "dedicated", "reseller", "wordpress", "cloud", "deal", "offer", "black-friday", "sale"]
+    anchor_text: ["pricing", "plans", "compare", "packages", "rates", "buy"]
+  page_signals:
+    currency_symbols: ["$", "€", "£", "₹", "¥", "₦"]
+    period_tokens: ["/mo", "per month", "monthly", "per year", "annually", "billed", "/yr", "yearly"]
+
+fetch:
+  mode: "auto"                 # "http" | "playwright" | "auto"
+  playwright:
+    enabled: true
+    headless: true
+    browser: "chromium"
+    navigation_timeout_seconds: 45
+    wait_until: "networkidle"
+    wait_after_load_ms: 750
+    toggle_billing:
+      enabled: true
+      target: "monthly"        # click the monthly selector when present
+      labels:
+        monthly: ["Monthly", "Per month", "Month", "mo"]
+        yearly: ["Yearly", "Annually", "Per year", "Annual", "yr"]
+    block_resource_types: ["image", "media", "font"]
+    browser_args: []
+  http:
+    verify_tls: true
+    follow_redirects: true
+
+extraction:
+  enabled_extractors: ["schema_org", "dom_tables", "dom_cards", "xhr_json"]
+  min_confidence_to_accept: 0.55
+  currency_default: "USD"
+  max_packages_per_page: 120
+  normalize:
+    infer_billing_term_months: true
+    default_billing_period: "month"   # used when a price has no cadence token
+    monthly_tokens: ["/mo", "/month", "per month", "monthly", "mo", "month"]
+    yearly_tokens: ["/yr", "/year", "per year", "yearly", "annual", "annually", "yr"]
+    dedupe: true
+
+proxy:
+  enabled: false
+  policy:
+    mode: "fallback"           # "off" | "on" | "fallback" | "per_domain"
+    blocked_statuses: [403, 407, 429, 503]
+    challenge_markers: ["attention required", "just a moment", "cf-challenge", "captcha", "are you a human", "enable javascript and cookies", "access denied", "unusual traffic"]
+    retry_with_playwright: true
+  # Each resource is off by default so the example config runs without credentials.
+  resources:
+    - name: "corp-dc-1"
+      type: "http_pool"
+      enabled: false
+      endpoints:
+        - "http://user:pass@proxy1.example.com:8000"
+        - "http://user:pass@proxy2.example.com:8000"
+      rotate: "per_request"    # "per_request" | "per_domain"
+    - name: "local-tor"
+      type: "socks5"
+      enabled: false
+      endpoint: "socks5://127.0.0.1:9050"
+    - name: "scrapingbee"
+      type: "smart_proxy"
+      enabled: false
+      endpoint: "https://app.scrapingbee.com/api/v1/"
+      api_key_env: "SCRAPINGBEE_API_KEY"
+      url_param: "url"
+      params:
+        render_js: "true"
+        api_key: "{api_key}"
+  domains: {}
+    # "example.com":
+    #   use_proxy: true
+    #   resource: "corp-dc-1"
+    #   mode: "on"
+
+storage:
+  output_dir: "runs"
+  save_raw_html: true
+  save_screenshots: false
+  save_extracted_json: true
+  formats:
+    jsonl: true
+    csv: false
+  postgres:
+    enabled: false
+    dsn: "postgresql+psycopg://user:pass@localhost:5432/hosting_scraper"
+    packages_table: "hosting_packages"
+    offers_table: "hosting_offers"
+
+logging:
+  level: "INFO"
+  json_logs: false
+
+overrides:
+  # Per-site overrides are merged over the global crawl/discovery/fetch/extraction
+  # settings. Keys match the provider domain, a parent domain, or "*".
+  sites:
+    "hostinger.com":
+      discovery:
+        max_candidate_pages_per_site: 12
+      fetch:
+        mode: "playwright"
+    "example.com":
+      crawl:
+        delay_seconds: 2.0

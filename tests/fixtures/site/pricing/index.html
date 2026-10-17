@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pricing | Local Hosting</title>
+<script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Starter",
+    "description": "For personal sites and blogs",
+    "offers": {
+      "@type": "Offer",
+      "price": "3.99",
+      "priceCurrency": "USD",
+      "priceSpecification": {"@type": "UnitPriceSpecification", "billingDuration": "P1M"}
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Pro",
+    "description": "For growing businesses",
+    "offers": {
+      "@type": "Offer",
+      "price": "8.99",
+      "priceCurrency": "USD",
+      "priceSpecification": {"@type": "UnitPriceSpecification", "billingDuration": "P1M"}
+    }
+  }
+]
+</script>
+</head>
+<body>
+<header><nav><a href="/">Home</a> <a href="/vps">VPS Hosting</a> <a href="/web-hosting">Web Hosting</a></nav></header>
+<main>
+  <h1>Hosting plans</h1>
+  <p>Every plan includes a free domain for the first year.</p>
+  <div class="pricing-grid">
+    <div class="pricing-card">
+      <h3>Free</h3>
+      <p class="tagline">Start for free</p>
+      <div class="price">Free</div>
+      <ul><li>1 website</li><li>1 GB SSD storage</li><li>Free SSL certificate</li></ul>
+      <a class="button" href="/signup">Get started</a>
+    </div>
+    <div class="pricing-card">
+      <h3>Starter</h3>
+      <p class="tagline">For personal sites and blogs</p>
+      <div class="price"><span class="currency">$</span><span class="amount">3.99</span><span class="period">/mo</span></div>
+      <ul><li>10 GB SSD storage</li><li>Free SSL certificate</li><li>1 website</li></ul>
+      <a class="button" href="/signup">Get started</a>
+    </div>
+    <div class="pricing-card popular">
+      <h3>Pro</h3>
+      <p class="tagline">For growing businesses</p>
+      <div class="price"><span class="currency">$</span><span class="amount">8.99</span><span class="period">/mo</span></div>
+      <ul><li>50 GB NVMe storage</li><li>Unlimited bandwidth</li><li>Free SSL certificate</li></ul>
+      <a class="button" href="/signup">Get started</a>
+    </div>
+  </div>
+  <p class="promo">Save 20% on annual plans with code SAVE20.</p>
+  <h2>Compare plans</h2>
+  <table>
+    <thead><tr><th>Plan</th><th>Price</th><th>Features</th></tr></thead>
+    <tbody>
+      <tr><td>Business</td><td>$14.99/mo</td><td>100 GB NVMe, priority support</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
