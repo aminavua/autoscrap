@@ -5,7 +5,7 @@ REM ============================================================
 REM  Progressive 7-Zip Archiver with Deletion + TRACKER
 REM  Compresses each subfolder/file into individual .7z archives
 REM  and deletes originals one-by-one to progressively free space.
-REM  Archives are saved IN-PLACE (same folder as source).
+REM  Archives are saved to OneDrive for cloud backup and space savings.
 REM  Maintains a tracker file to skip already-processed items.
 REM ============================================================
 
