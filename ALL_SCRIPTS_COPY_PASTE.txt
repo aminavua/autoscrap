@@ -1,0 +1,516 @@
+================================================================================
+INSTRUCTIONS: Copy each section below and save as the filename shown.
+Save all files to: E:\ROC_Files\
+================================================================================
+
+
+================================================================================
+FILE 1: Save as "progressive_7zip_tracker.bat"
+================================================================================
+
+@echo off
+setlocal enabledelayedexpansion
+
+REM ============================================================
+REM  Progressive 7-Zip Archiver with Deletion + TRACKER
+REM  Compresses each subfolder/file into individual .7z archives
+REM  and deletes originals one-by-one to progressively free space.
+REM  Maintains a tracker file to skip already-processed items.
+REM ============================================================
+
+REM ---------- CONFIGURATION ----------
+set "SOURCE=E:\ROC_Files\SiteFolder"
+set "OUTPUT=E:\ROC_Files\SiteFolder_Compressed"
+set "SEVENZIP=C:\Program Files\7-Zip\7z.exe"
+set "COMPRESSION=5"
+set "LOGFILE=E:\ROC_Files\compress_log.txt"
+set "TRACKER=E:\ROC_Files\progress_tracker.txt"
+REM ---------- END CONFIGURATION ----------
+
+echo.
+echo ============================================================
+echo  Progressive 7-Zip Archiver (with Tracker)
+echo  Source:  %SOURCE%
+echo  Output:  %OUTPUT%
+echo  Tracker: %TRACKER%
+echo ============================================================
+echo.
+
+if not exist "%SEVENZIP%" (
+    echo [ERROR] 7-Zip not found at: %SEVENZIP%
+    echo         Please install 7-Zip or update the SEVENZIP variable.
+    pause
+    exit /b 1
+)
+
+if not exist "%SOURCE%" (
+    echo [ERROR] Source directory not found: %SOURCE%
+    pause
+    exit /b 1
+)
+
+if not exist "%OUTPUT%" mkdir "%OUTPUT%"
+
+if not exist "%TRACKER%" (
+    echo # Progressive 7-Zip Tracker > "%TRACKER%"
+    echo # Created: %date% %time% >> "%TRACKER%"
+    echo # Format: TYPE^|NAME^|TIMESTAMP^|STATUS >> "%TRACKER%"
+    echo # ============================================ >> "%TRACKER%"
+)
+
+echo [%date% %time%] === Compression session started === >> "%LOGFILE%"
+
+set /a TOTAL_FOLDERS=0
+set /a DONE_FOLDERS=0
+set /a SKIP_FOLDERS=0
+set /a FAIL_FOLDERS=0
+set /a TOTAL_FILES=0
+set /a DONE_FILES=0
+set /a SKIP_FILES=0
+set /a FAIL_FILES=0
+
+echo Loading tracker database...
+set /a TRACKER_COUNT=0
+for /f "skip=4 usebackq" %%A in ("%TRACKER%") do set /a TRACKER_COUNT+=1
+echo Tracker loaded: %TRACKER_COUNT% existing entries.
+echo.
+
+echo [PHASE 1] Compressing subfolders...
+echo.
+
+for /d %%F in ("%SOURCE%\*") do set /a TOTAL_FOLDERS+=1
+echo Found %TOTAL_FOLDERS% subfolders to process.
+echo.
+
+for /d %%F in ("%SOURCE%\*") do (
+    set "FOLDER_NAME=%%~nxF"
+    set "FOLDER_PATH=%%F"
+    set "ARCHIVE=%OUTPUT%\!FOLDER_NAME!.7z"
+    
+    set "IS_TRACKED=0"
+    findstr /c:"FOLDER|!FOLDER_NAME!|" "%TRACKER%" >nul 2>&1 && set "IS_TRACKED=1"
+    
+    if "!IS_TRACKED!"=="1" (
+        echo [SKIP] !FOLDER_NAME! - already in tracker
+        set /a SKIP_FOLDERS+=1
+    ) else if exist "!ARCHIVE!" (
+        echo [RECOVER] !FOLDER_NAME! - archive exists, verifying...
+        
+        "%SEVENZIP%" t "!ARCHIVE!" >nul 2>&1
+        if !errorlevel! equ 0 (
+            if exist "!FOLDER_PATH!" (
+                rmdir /s /q "!FOLDER_PATH!"
+                if !errorlevel! equ 0 (
+                    echo   [OK] Archive verified and source deleted
+                    echo FOLDER^|!FOLDER_NAME!^|%date% %time%^|RECOVERED >> "%TRACKER%"
+                    set /a DONE_FOLDERS+=1
+                    echo [%date% %time%] [RECOVERED] !FOLDER_NAME! >> "%LOGFILE%"
+                ) else (
+                    echo   [WARN] Archive verified but deletion failed
+                    echo FOLDER^|!FOLDER_NAME!^|%date% %time%^|DELETE_FAILED >> "%TRACKER%"
+                    set /a FAIL_FOLDERS+=1
+                    echo [%date% %time%] [DELETE_FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+                )
+            ) else (
+                echo   [OK] Archive verified, source already deleted
+                echo FOLDER^|!FOLDER_NAME!^|%date% %time%^|ALREADY_DELETED >> "%TRACKER%"
+                set /a SKIP_FOLDERS+=1
+            )
+        ) else (
+            echo   [FAIL] Archive verification failed - NOT deleting source
+            set /a FAIL_FOLDERS+=1
+            echo [%date% %time%] [VERIFY_FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+        )
+    ) else (
+        echo [COMPRESSING] !FOLDER_NAME! ...
+        
+        "%SEVENZIP%" a -t7z -mx=%COMPRESSION% -mmt=on "!ARCHIVE!" "!FOLDER_PATH!\*" >nul 2>&1
+        
+        if !errorlevel! equ 0 (
+            if exist "!ARCHIVE!" (
+                "%SEVENZIP%" t "!ARCHIVE!" >nul 2>&1
+                if !errorlevel! equ 0 (
+                    echo   [OK] Archive created and verified. Deleting original folder...
+                    rmdir /s /q "!FOLDER_PATH!"
+                    
+                    if !errorlevel! equ 0 (
+                        echo   [DELETED] !FOLDER_NAME!
+                        echo FOLDER^|!FOLDER_NAME!^|%date% %time%^|SUCCESS >> "%TRACKER%"
+                        set /a DONE_FOLDERS+=1
+                        echo [%date% %time%] [OK] !FOLDER_NAME! >> "%LOGFILE%"
+                    ) else (
+                        echo   [WARN] Archive verified but deletion failed for !FOLDER_NAME!
+                        echo FOLDER^|!FOLDER_NAME!^|%date% %time%^|DELETE_FAILED >> "%TRACKER%"
+                        set /a FAIL_FOLDERS+=1
+                        echo [%date% %time%] [DELETE_FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+                    )
+                ) else (
+                    echo   [FAIL] Archive created but verification failed - keeping source
+                    set /a FAIL_FOLDERS+=1
+                    echo [%date% %time%] [VERIFY_FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+                    del /f /q "!ARCHIVE!" >nul 2>&1
+                )
+            ) else (
+                echo   [FAIL] Archive not created for !FOLDER_NAME!
+                set /a FAIL_FOLDERS+=1
+                echo [%date% %time%] [FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+            )
+        ) else (
+            echo   [FAIL] 7-Zip error for !FOLDER_NAME!
+            set /a FAIL_FOLDERS+=1
+            echo [%date% %time%] [FAIL] !FOLDER_NAME! >> "%LOGFILE%"
+            if exist "!ARCHIVE!" del /f /q "!ARCHIVE!" >nul 2>&1
+        )
+    )
+    
+    set /a _COUNT=DONE_FOLDERS+SKIP_FOLDERS+FAIL_FOLDERS
+    set /a _MOD=_COUNT %% 100
+    if !_MOD! equ 0 (
+        if !_COUNT! gtr 0 (
+            echo --- Progress: !_COUNT!/%TOTAL_FOLDERS% folders processed ---
+        )
+    )
+)
+
+echo.
+echo [PHASE 1 COMPLETE] Folders - Done: %DONE_FOLDERS%, Skipped: %SKIP_FOLDERS%, Failed: %FAIL_FOLDERS%
+echo.
+
+echo [PHASE 2] Compressing loose files in root...
+echo.
+
+for %%F in ("%SOURCE%\*.*") do (
+    if /i not "%%~xF"==".7z" (
+        if /i not "%%~nxF"=="desktop.ini" (
+            set /a TOTAL_FILES+=1
+        )
+    )
+)
+echo Found %TOTAL_FILES% loose files to process.
+echo.
+
+for %%F in ("%SOURCE%\*.*") do (
+    if /i not "%%~xF"==".7z" (
+        if /i not "%%~nxF"=="desktop.ini" (
+            set "FILE_NAME=%%~nxF"
+            set "FILE_PATH=%%F"
+            set "ARCHIVE=%OUTPUT%\!FILE_NAME!.7z"
+            
+            set "IS_TRACKED=0"
+            findstr /c:"FILE|!FILE_NAME!|" "%TRACKER%" >nul 2>&1 && set "IS_TRACKED=1"
+            
+            if "!IS_TRACKED!"=="1" (
+                echo [SKIP] !FILE_NAME! - already in tracker
+                set /a SKIP_FILES+=1
+            ) else if exist "!ARCHIVE!" (
+                echo [RECOVER] !FILE_NAME! - archive exists, verifying...
+                
+                "%SEVENZIP%" t "!ARCHIVE!" >nul 2>&1
+                if !errorlevel! equ 0 (
+                    if exist "!FILE_PATH!" (
+                        del /f /q "!FILE_PATH!"
+                        if !errorlevel! equ 0 (
+                            echo   [OK] Archive verified and source deleted
+                            echo FILE^|!FILE_NAME!^|%date% %time%^|RECOVERED >> "%TRACKER%"
+                            set /a DONE_FILES+=1
+                            echo [%date% %time%] [RECOVERED] !FILE_NAME! >> "%LOGFILE%"
+                        ) else (
+                            echo   [WARN] Archive verified but deletion failed
+                            echo FILE^|!FILE_NAME!^|%date% %time%^|DELETE_FAILED >> "%TRACKER%"
+                            set /a FAIL_FILES+=1
+                            echo [%date% %time%] [DELETE_FAIL] !FILE_NAME! >> "%LOGFILE%"
+                        )
+                    ) else (
+                        echo   [OK] Archive verified, source already deleted
+                        echo FILE^|!FILE_NAME!^|%date% %time%^|ALREADY_DELETED >> "%TRACKER%"
+                        set /a SKIP_FILES+=1
+                    )
+                ) else (
+                    echo   [FAIL] Archive verification failed - NOT deleting source
+                    set /a FAIL_FILES+=1
+                    echo [%date% %time%] [VERIFY_FAIL] !FILE_NAME! >> "%LOGFILE%"
+                )
+            ) else (
+                echo [COMPRESSING] !FILE_NAME! ...
+                
+                "%SEVENZIP%" a -t7z -mx=%COMPRESSION% -mmt=on "!ARCHIVE!" "!FILE_PATH!" >nul 2>&1
+                
+                if !errorlevel! equ 0 (
+                    if exist "!ARCHIVE!" (
+                        "%SEVENZIP%" t "!ARCHIVE!" >nul 2>&1
+                        if !errorlevel! equ 0 (
+                            echo   [OK] Archive created and verified. Deleting original file...
+                            del /f /q "!FILE_PATH!"
+                            
+                            if !errorlevel! equ 0 (
+                                echo   [DELETED] !FILE_NAME!
+                                echo FILE^|!FILE_NAME!^|%date% %time%^|SUCCESS >> "%TRACKER%"
+                                set /a DONE_FILES+=1
+                                echo [%date% %time%] [OK] !FILE_NAME! >> "%LOGFILE%"
+                            ) else (
+                                echo   [WARN] Archive verified but deletion failed for !FILE_NAME!
+                                echo FILE^|!FILE_NAME!^|%date% %time%^|DELETE_FAILED >> "%TRACKER%"
+                                set /a FAIL_FILES+=1
+                                echo [%date% %time%] [DELETE_FAIL] !FILE_NAME! >> "%LOGFILE%"
+                            )
+                        ) else (
+                            echo   [FAIL] Archive created but verification failed - keeping source
+                            set /a FAIL_FILES+=1
+                            echo [%date% %time%] [VERIFY_FAIL] !FILE_NAME! >> "%LOGFILE%"
+                            del /f /q "!ARCHIVE!" >nul 2>&1
+                        )
+                    ) else (
+                        echo   [FAIL] Archive not created for !FILE_NAME!
+                        set /a FAIL_FILES+=1
+                        echo [%date% %time%] [FAIL] !FILE_NAME! >> "%LOGFILE%"
+                    )
+                ) else (
+                    echo   [FAIL] 7-Zip error for !FILE_NAME!
+                    set /a FAIL_FILES+=1
+                    echo [%date% %time%] [FAIL] !FILE_NAME! >> "%LOGFILE%"
+                    if exist "!ARCHIVE!" del /f /q "!ARCHIVE!" >nul 2>&1
+                )
+            )
+        )
+    )
+)
+
+echo.
+echo [PHASE 2 COMPLETE] Files - Done: %DONE_FILES%, Skipped: %SKIP_FILES%, Failed: %FAIL_FILES%
+
+echo.
+echo ============================================================
+echo  SUMMARY
+echo ============================================================
+echo  Folders compressed:  %DONE_FOLDERS% / %TOTAL_FOLDERS%
+echo  Folders skipped:     %SKIP_FOLDERS%
+echo  Folders failed:      %FAIL_FOLDERS%
+echo  Files compressed:    %DONE_FILES% / %TOTAL_FILES%
+echo  Files skipped:       %SKIP_FILES%
+echo  Files failed:        %FAIL_FILES%
+echo.
+echo  Tracker: %TRACKER%
+echo  Log:     %LOGFILE%
+echo ============================================================
+echo.
+
+echo [%date% %time%] === Compression session finished === >> "%LOGFILE%"
+echo Done! Press any key to exit.
+pause >nul
+
+
+================================================================================
+FILE 2: Save as "tracker_manager.bat"
+================================================================================
+
+@echo off
+setlocal enabledelayedexpansion
+
+set "TRACKER=E:\ROC_Files\progress_tracker.txt"
+set "SOURCE=E:\ROC_Files\SiteFolder"
+
+:MENU
+cls
+echo ============================================================
+echo  Progress Tracker Management
+echo ============================================================
+echo.
+echo  Tracker file: %TRACKER%
+echo.
+if not exist "%TRACKER%" (
+    echo  [No tracker file found - run progressive_7zip_tracker.bat first]
+    echo.
+    echo  Press any key to exit...
+    pause >nul
+    exit /b 0
+)
+
+echo  [1] Show tracker statistics
+echo  [2] View full tracker contents
+echo  [3] Search for a specific folder/file in tracker
+echo  [4] Show recently processed items (last 50)
+echo  [5] Show failed items
+echo  [6] Exit
+echo.
+set /p CHOICE="Select an option (1-6): "
+
+if "%CHOICE%"=="1" goto STATS
+if "%CHOICE%"=="2" goto VIEW_ALL
+if "%CHOICE%"=="3" goto SEARCH
+if "%CHOICE%"=="4" goto RECENT
+if "%CHOICE%"=="5" goto FAILED
+if "%CHOICE%"=="6" exit /b 0
+goto MENU
+
+:STATS
+cls
+echo ============================================================
+echo  Tracker Statistics
+echo ============================================================
+echo.
+
+set /a TOTAL=0
+set /a FOLDERS=0
+set /a FILES=0
+set /a SUCCESS=0
+set /a RECOVERED=0
+set /a DELETE_FAILED=0
+
+for /f "skip=4 tokens=1,2,4 delims=|" %%A in ('type "%TRACKER%"') do (
+    set /a TOTAL+=1
+    if "%%A"=="FOLDER" set /a FOLDERS+=1
+    if "%%A"=="FILE" set /a FILES+=1
+    if "%%C"=="SUCCESS" set /a SUCCESS+=1
+    if "%%C"=="RECOVERED" set /a RECOVERED+=1
+    if "%%C"=="DELETE_FAILED" set /a DELETE_FAILED+=1
+    if "%%C"=="ALREADY_DELETED" set /a RECOVERED+=1
+)
+
+echo  Total tracked items:     %TOTAL%
+echo  Folders:                 %FOLDERS%
+echo  Files:                   %FILES%
+echo.
+echo  Successful:              %SUCCESS%
+echo  Recovered:               %RECOVERED%
+echo  Delete failed:           %DELETE_FAILED%
+echo.
+pause
+goto MENU
+
+:VIEW_ALL
+cls
+echo ============================================================
+echo  Full Tracker Contents
+echo ============================================================
+echo.
+type "%TRACKER%"
+echo.
+echo ============================================================
+pause
+goto MENU
+
+:SEARCH
+cls
+echo ============================================================
+echo  Search Tracker
+echo ============================================================
+echo.
+set /p SEARCH_TERM="Enter folder/file name to search: "
+echo.
+echo Search results for: %SEARCH_TERM%
+echo ------------------------------------------------------------
+findstr /i "%SEARCH_TERM%" "%TRACKER%"
+echo ------------------------------------------------------------
+echo.
+pause
+goto MENU
+
+:RECENT
+cls
+echo ============================================================
+echo  Recently Processed Items (Last 50)
+echo ============================================================
+echo.
+
+set /a LINE_COUNT=0
+for /f %%A in ('type "%TRACKER%"') do set /a LINE_COUNT+=1
+
+set /a SKIP_LINES=LINE_COUNT-50
+if %SKIP_LINES% lss 4 set /a SKIP_LINES=4
+
+more +%SKIP_LINES% "%TRACKER%"
+echo.
+pause
+goto MENU
+
+:FAILED
+cls
+echo ============================================================
+echo  Failed Items
+echo ============================================================
+echo.
+echo Items with DELETE_FAILED or FAIL status:
+echo ------------------------------------------------------------
+findstr "DELETE_FAILED FAIL" "%TRACKER%"
+echo ------------------------------------------------------------
+echo.
+pause
+goto MENU
+
+
+================================================================================
+FILE 3: Save as "check_sizes.bat"
+================================================================================
+
+@echo off
+setlocal enabledelayedexpansion
+
+set "SOURCE=E:\ROC_Files\SiteFolder"
+set "REPORT=E:\ROC_Files\folder_sizes.txt"
+
+echo Scanning folder sizes in %SOURCE%...
+echo This may take a while with 20k folders...
+echo.
+
+echo Folder Size Report - %date% %time% > "%REPORT%"
+echo Source: %SOURCE% >> "%REPORT%"
+echo ============================================= >> "%REPORT%"
+
+set /a COUNT=0
+set /a OVER_500MB=0
+set /a OVER_1GB=0
+
+for /d %%F in ("%SOURCE%\*") do (
+    set "FOLDER=%%~nxF"
+    set "PATH=%%F"
+    
+    set "SIZE=0"
+    for /f "tokens=3" %%S in ('dir /s /a "%%F" 2^>nul ^| findstr /c:"File(s)"') do (
+        set "SIZE=%%S"
+    )
+    
+    set "SIZE=!SIZE:,=!"
+    
+    if !SIZE! gtr 524288000 set /a OVER_500MB+=1
+    if !SIZE! gtr 1073741824 set /a OVER_1GB+=1
+    
+    echo !SIZE!    !FOLDER! >> "%REPORT%"
+    
+    set /a COUNT+=1
+    set /a _MOD=COUNT %% 500
+    if !_MOD! equ 0 echo ... scanned !COUNT! folders ...
+)
+
+echo. >> "%REPORT%"
+echo ============================================= >> "%REPORT%"
+echo Total folders scanned: %COUNT% >> "%REPORT%"
+echo Folders over 500MB: %OVER_500MB% >> "%REPORT%"
+echo Folders over 1GB:   %OVER_1GB% >> "%REPORT%"
+
+echo.
+echo Done! Results saved to: %REPORT%
+echo.
+echo WARNING: You have ~1GB free space.
+if %OVER_1GB% gtr 0 (
+    echo *** %OVER_1GB% folders are LARGER than 1GB! ***
+    echo These will FAIL to compress in-place. Consider:
+    echo   1. Use OUTPUT on a different drive with more space
+    echo   2. Set COMPRESSION=0 (store mode) to minimize temp space
+    echo   3. Manually handle these large folders first
+) else (
+    echo All folders appear to be under 1GB - you should be fine.
+)
+echo.
+pause
+
+
+================================================================================
+END OF FILES
+================================================================================
+
+USAGE:
+1. Copy FILE 1 content and save as: E:\ROC_Files\progressive_7zip_tracker.bat
+2. Copy FILE 2 content and save as: E:\ROC_Files\tracker_manager.bat
+3. Copy FILE 3 content and save as: E:\ROC_Files\check_sizes.bat
+
+Then run check_sizes.bat first (as Administrator), followed by progressive_7zip_tracker.bat (as Administrator).
